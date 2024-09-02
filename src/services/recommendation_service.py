@@ -52,10 +52,9 @@ class RecommendationsService:
             store_score /= store_score.sum()
             
             combined_score = prices_score * self.price_weight + store_score * self.store_weight
-            combined_score /= combined_score.sum()  # Normalize combined score
+            combined_score /= combined_score.sum()
 
             self.sales_df.loc[group.index, 'price_and_store_combined_score'] = combined_score
-
 
     def choose_new_user_recommended_products(self, amount: int) -> pd.DataFrame:
         """
