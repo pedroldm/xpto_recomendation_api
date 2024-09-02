@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from src.api.recommendations import recommendations_router
+from src.api.recommendations_router import recommendations_router
 
 app = FastAPI()
 

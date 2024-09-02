@@ -1,7 +1,16 @@
-import pandas as pd
 import numpy as np
-from src.config import get_database_path, get_sales_bias, get_price_bias, get_store_sales_bias
+import pandas as pd
+
+from src.config import (
+    get_database_path,
+    get_price_bias,
+    get_price_weight,
+    get_sales_bias,
+    get_store_sales_bias,
+    get_store_weight,
+)
 from src.models.recommendation_model import Recommendation
+
 
 class RecommendationsService:
     _instance = None
@@ -23,18 +32,30 @@ class RecommendationsService:
         self.sales_df = pd.read_csv(get_database_path())
         self.sales_per_product = self.sales_df.groupby(by=['product_id']).agg({'sales_per_day': 'sum'}).reset_index()
         self.sales_per_store = self.sales_df.groupby(by=['store_id']).agg({'sales_per_day': 'sum'}).reset_index()
-
+        self.sales_df = self.sales_df.merge(self.sales_per_store, on='store_id', suffixes=('', '_store_score'))
+        self.sales_df['price_and_store_combined_score'] = [0.0] * len(self.sales_df)
+        
         self.sales_bias = get_sales_bias()
         self.price_bias = get_price_bias()
+        self.price_weight = get_price_weight()
+        self.store_weight = get_store_weight()
         self.store_sales_bias = get_store_sales_bias()
 
-        self.sales_per_product['sales_per_day'] **= self.sales_bias
+        self.sales_per_product['sales_per_day_score'] = self.sales_per_product['sales_per_day'] ** self.sales_bias
+        self.sales_per_product['sales_per_day_score'] = self.sales_per_product['sales_per_day_score'] / self.sales_per_product['sales_per_day_score'].sum()
+        
+        for _, group in self.sales_df.groupby(by=['product_id']):
+            prices_score = 1 / (group['product_price'] ** self.price_bias)
+            prices_score /= prices_score.sum()
 
-        self.sales_df = self.sales_df.merge(self.sales_per_store, on='store_id', suffixes=('', '_store_score'))
-        self.sales_df['price_and_store_combined_score'] = (
-            self.price_bias * self.sales_df['product_price'] +
-            self.store_sales_bias * self.sales_df['sales_per_day_store_score']
-        )
+            store_score = group['sales_per_day_store_score'] ** self.store_sales_bias
+            store_score /= store_score.sum()
+            
+            combined_score = prices_score * self.price_weight + store_score * self.store_weight
+            combined_score /= combined_score.sum()  # Normalize combined score
+
+            self.sales_df.loc[group.index, 'price_and_store_combined_score'] = combined_score
+
 
     def choose_new_user_recommended_products(self, amount: int) -> pd.DataFrame:
         """
@@ -46,10 +67,10 @@ class RecommendationsService:
         Returns:
         - pd.DataFrame: A DataFrame containing the recommended products, filtered by the selected product IDs.
         """
-        chosen_product_ids = self.sales_per_product.sample(n=amount, weights='sales_per_day')['product_id']
+        chosen_product_ids = self.sales_per_product.sample(n=amount, weights='sales_per_day_score')['product_id']
         return self.sales_df[self.sales_df['product_id'].isin(chosen_product_ids)]
 
-    def choose_new_user_product_announcement(self, product: pd.DataFrame) -> dict:
+    def choose_new_user_product_announcement(self, product: pd.DataFrame) -> Recommendation:
         """
         Chooses a product announcement from the given product DataFrame.
 
@@ -59,7 +80,7 @@ class RecommendationsService:
         Returns:
         - Recommendation: A Recommendation dataclass instance with the details of the chosen product announcement.
         """
-        chosen_announcement = product.sample(weights='combined_score').iloc[0]
+        chosen_announcement = product.sample(weights='price_and_store_combined_score').iloc[0]
         return Recommendation(
             product_id=chosen_announcement['product_id'],
             product_title=chosen_announcement['product_title'],
@@ -69,7 +90,7 @@ class RecommendationsService:
             store_name=chosen_announcement['store_name']
         )
     
-    def get_new_user_recommendations(self, amount: int):
+    def get_new_user_recommendations(self, amount: int) -> list[Recommendation]:
         """
         Retrieves new user recommendations by selecting recommended products and choosing product announcements.
 
