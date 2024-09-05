@@ -10,4 +10,4 @@ WORKDIR /xpto_recommendation_api
 
 RUN poetry install
 
-CMD ["poetry", "run", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--reload"]
+CMD ["poetry", "run", "gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "src.main:app"]
