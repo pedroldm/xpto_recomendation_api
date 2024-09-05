@@ -1,3 +1,6 @@
+import asyncio
+import os
+
 import numpy as np
 import pandas as pd
 
@@ -29,7 +32,8 @@ class RecommendationsService:
         applies sales and price biases, and prepares the combined score for products based on price
         and store sales.
         """
-        self.sales_df = pd.read_csv(get_database_path())
+        root_path = os.path.dirname(os.path.abspath(__file__))
+        db_path = os.path.join(root_path, get_database_path())
         self.sales_per_product = self.sales_df.groupby(by=['product_id']).agg({'sales_per_day': 'sum'}).reset_index()
         self.sales_per_store = self.sales_df.groupby(by=['store_id']).agg({'sales_per_day': 'sum'}).reset_index()
         self.sales_df = self.sales_df.merge(self.sales_per_store, on='store_id', suffixes=('', '_store_score'))
@@ -56,7 +60,7 @@ class RecommendationsService:
 
             self.sales_df.loc[group.index, 'price_and_store_combined_score'] = combined_score
 
-    def choose_new_user_recommended_products(self, amount: int) -> pd.DataFrame:
+    async def choose_new_user_recommended_products(self, amount: int) -> pd.DataFrame:
         """
         Selects a specified number of recommended products based on sales data.
 
@@ -69,7 +73,7 @@ class RecommendationsService:
         chosen_product_ids = self.sales_per_product.sample(n=amount, weights='sales_per_day_score')['product_id']
         return self.sales_df[self.sales_df['product_id'].isin(chosen_product_ids)]
 
-    def choose_new_user_product_announcement(self, product: pd.DataFrame) -> Recommendation:
+    async def choose_new_user_product_announcement(self, product: pd.DataFrame) -> Recommendation:
         """
         Chooses a product announcement from the given product DataFrame.
 
@@ -89,7 +93,7 @@ class RecommendationsService:
             store_name=chosen_announcement['store_name']
         )
     
-    def get_new_user_recommendations(self, amount: int) -> list[Recommendation]:
+    async def get_new_user_recommendations(self, amount: int) -> list[Recommendation]:
         """
         Retrieves new user recommendations by selecting recommended products and choosing product announcements.
 
@@ -99,5 +103,8 @@ class RecommendationsService:
         Returns:
         - List[Recommendation]: A list of Recommendation dataclass instances, one for each unique product ID.
         """
-        recommended_products = self.choose_new_user_recommended_products(amount=amount)
-        return [self.choose_new_user_product_announcement(product_df) for _, product_df in recommended_products.groupby(by=['product_id'])]
+        recommended_products = await self.choose_new_user_recommended_products(amount=amount)
+        return await asyncio.gather(*[
+            self.choose_new_user_product_announcement(product_df) 
+            for _, product_df in recommended_products.groupby(by=['product_id'])
+        ])
