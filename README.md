@@ -3,6 +3,11 @@
 A API de Recomendação XPTO foi criada para sugerir produtos relevantes a novos usuários do marketplace XPTO. Utilizando uma base histórica de vendas e um algoritmo heurístico parametrizável, a API fornece recomendações personalizadas para aprimorar a experiência do usuário.
 
 ## 1. Algoritmo de Recomendação
+
+Para visualizar as fórmulas matemáticas corretamente, é recomendado utilizar um compilador de Markdown que suporte LaTeX, como o MathJax, ou uma plataforma compatível, como Jupyter Notebooks ou VS Code com a extensão apropriada.
+
+Se estiver visualizando este documento no GitHub ou em outro ambiente sem suporte nativo a fórmulas matemáticas, as equações podem não ser renderizadas corretamente.
+
 ### 1.1 Seleção dos Produtos
 Os produtos recomendados são selecionados de forma pseudoaleatória com probabilidades proporcionais à quantidade de vendas. É possível adicionar viés exponencial às vendas, de forma a favorecer ainda mais os produtos mais vendidos.
 
@@ -143,6 +148,12 @@ Essa abordagem assegura que produtos com boas pontuações tanto em preço quant
 - **Comunidade menor**: Biblioteca relativamente nova em comparação com Pandas, resultando em uma comunidade menor e menos suporte da comunidade.
 - **Desempenho desnecessário**: A principal vantagem do Polars é o desempenho em grandes conjuntos de dados. Para bases pequenas e pouca manipulação, o desempenho do Pandas é suficiente.
 
+### 2.3 **Pytest**
+- **Simplicidade e Flexibilidade**: Fácil de usar e não requer muita configuração.
+- **Fixtures Poderosas**: Permite a criação de fixtures, que são blocos de código reutilizáveis para configurar ambientes de teste.
+- **Plugins Extensivos**: Pytest tem uma vasta gama de plugins que ampliam suas funcionalidades. Plugins como pytest-django, pytest-flask, e pytest-cov facilitam a integração com frameworks web e ajudam na medição de cobertura de testes.
+- **Execução Paralela de Testes**: Com o plugin pytest-xdist, você pode rodar testes em paralelo, acelerando significativamente o tempo de execução, algo muito útil para APIs com muitas rotas ou casos de uso complexos.
+
 ## 3. Instalação
 ### 3.1 Docker
 ```sh
@@ -150,13 +161,22 @@ docker build -t xpto_recommendation_api .
 docker run -d --name xpto_recommendation_api xpto_recommendation_api
 ```
 
+**Importante:** para alterar o número de workers da aplicação, altere o parâmetro -w no Dockerfile.
+
 ### 3.2 Sem Docker
 ```sh
 pip install poetry
 poetry install
+```
+**Sem paralelismo:**
+```sh
 poetry run uvicorn src.main:app
 ```
-
+**Com paralelismo:**
+```sh
+poetry run gunicorn -w {n} -k uvicorn.workers.UvicornWorker src.main:app
+```
+O parâmetro **n** especifica o número de *workers*.
 ## 4. Rotas e Endpoints
 
 ### **GET** `/recommendations/{user_id}`
@@ -215,3 +235,16 @@ GET /recommendations/12345
 ]
 ```
 
+## 4. Testes de Performance
+**Biblioteca Utilizada:** Locust
+**Processos da API:** 16
+**Processos de Teste:** 8
+**Taxa de incremento de usuários:** 100 usuários / segundo
+
+![](tests/output/number_of_users_1725537877.444.png)
+
+Importante ressaltar que executar os testes e a API na mesma máquina impactam negativamente na performance da API. Em situações de alta carga, o teste e a API disputam recursos e interferem no desempenho. Entretanto, para uma execução local em apenas uma máquina, 4.000 RPS é um bom resultado. Para incrementar essa métrica seria possível:
+
+1. **Aumentar o número de workers**: Ajustar o número de workers da API pode ajudar a lidar com mais requisições simultâneas, dependendo da capacidade da máquina.
+2. **Escalonar horizontalmente**: Implementar balanceamento de carga e distribuir a aplicação em múltiplos servidores pode aumentar significativamente a capacidade de requisições por segundo (RPS).
+3. **Realizar os testes e a API em máquinas separadas**: Como mencionado anteriormente, quando o teste e a API são executados em uma mesma máquina, ambos disputarão recursos e terão suas performances afetadas negativamente.
