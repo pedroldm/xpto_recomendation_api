@@ -1,7 +1,6 @@
 import asyncio
-import os
+from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 from src.config import (
@@ -32,8 +31,10 @@ class RecommendationsService:
         applies sales and price biases, and prepares the combined score for products based on price
         and store sales.
         """
-        root_path = os.path.dirname(os.path.abspath(__file__))
-        db_path = os.path.join(root_path, get_database_path())
+        root_path = Path(__file__).resolve().parent.parent.parent
+        db_path = root_path / get_database_path()
+        self.sales_df = pd.read_csv(db_path)
+        
         self.sales_per_product = self.sales_df.groupby(by=['product_id']).agg({'sales_per_day': 'sum'}).reset_index()
         self.sales_per_store = self.sales_df.groupby(by=['store_id']).agg({'sales_per_day': 'sum'}).reset_index()
         self.sales_df = self.sales_df.merge(self.sales_per_store, on='store_id', suffixes=('', '_store_score'))
